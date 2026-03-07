@@ -42,7 +42,7 @@ class WavRecorder {
             }
 
             registerProcessor('audio-processor', AudioProcessor);
-        `], { type: 'application/javascript' }))));
+        `], { type: 'application/javascript' })));
         this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-processor');
         this.sourceNode.connect(this.workletNode);
         this.workletNode.connect(this.audioContext.destination);
