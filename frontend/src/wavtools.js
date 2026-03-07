@@ -1,3 +1,4 @@
+/* eslint-disable */
 class WavRecorder {
     constructor({ sampleRate = 24000 } = {}) {
         this.sampleRate = sampleRate;
