@@ -1,10 +1,20 @@
+# =============================================
+# Training Bot - CI Pipeline
+# =============================================
+# Backend Lint → Frontend Build → Docker Build → Summary
+# =============================================
+
 name: CI
 
 on:
   push:
     branches: [main, master]
+    paths-ignore: ['*.md', 'docs/**', '.claude/**', '.vscode/**']
   pull_request:
     branches: [main, master]
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,23 +29,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: 'pip'
       - name: Install linter
-        run: pip install flake8
+        run: pip install flake8 pip-audit
       - name: Run flake8
-        run: flake8 backend/ --max-line-length=120 --count --select=E9,F63,F7 --show-source --statistics
-
-  build-backend:
-    name: Build Backend Docker
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Build backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: false
-          tags: training-bot-backend:test
+        id: lint
+        run: |
+          flake8 backend/ --max-line-length=120 --count --show-source --statistics \
+            --select=E9,F63,F7,F82,E1,E4,W6
+      - name: Security audit (pip)
+        id: security
+        continue-on-error: true
+        run: |
+          if [ -f "backend/requirements.txt" ]; then
+            pip install -r backend/requirements.txt
+            pip-audit --desc 2>&1 | head -50
+          else
+            echo "No backend/requirements.txt found"
+          fi
 
   build-frontend:
     name: Build Frontend
@@ -45,11 +56,51 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         working-directory: frontend
         run: npm install --no-audit --prefer-offline 2>/dev/null || npm install --legacy-peer-deps --no-audit
       - name: Build
+        id: build
         working-directory: frontend
         run: npm run build --if-present
         env:
           CI: false
+      - name: Security audit (npm)
+        id: security
+        working-directory: frontend
+        continue-on-error: true
+        run: npm audit --audit-level=critical 2>&1 | tail -20
+
+  build-docker:
+    name: Build Backend Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend image
+        id: docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          tags: training-bot-backend:ci-${{ github.sha }}
+
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [lint-backend, build-frontend, build-docker]
+    if: always()
+    steps:
+      - name: CI Summary
+        run: |
+          echo "## CI Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Lint | ${{ needs.lint-backend.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Build | ${{ needs.build-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Build | ${{ needs.build-docker.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${GITHUB_SHA::7}\`" >> $GITHUB_STEP_SUMMARY
