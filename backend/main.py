@@ -1,6 +1,6 @@
 import os
+import sys
 import json
-import base64
 import asyncio
 import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -156,6 +156,7 @@ async def websocket_endpoint(websocket: WebSocket, template_id: int, db: Session
                         await asyncio.sleep(1)
 
                 async def process_response_queue():
+                    nonlocal is_closed
                     while not is_closed and not openai_ws.closed:
                         if response_queue and not has_active_response:
                             current_time = asyncio.get_event_loop().time()
@@ -181,14 +182,13 @@ async def websocket_endpoint(websocket: WebSocket, template_id: int, db: Session
                         await asyncio.sleep(0.01)
 
                 async def receive_from_client():
-                    nonlocal is_closed, rate_limit_delay
+                    nonlocal is_closed
                     try:
                         while not is_closed:
                             message = await websocket.receive_text()
                             data = json.loads(message)
                             if data["type"] == "audio":
                                 logger.info("Received audio chunk from client: %s bytes", len(data["data"]))
-                                audio_data = base64.b64decode(data["data"])
                                 if openai_ws.closed:
                                     logger.info("OpenAI WebSocket is closed, stopping client receive")
                                     is_closed = True
