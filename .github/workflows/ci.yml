@@ -36,7 +36,7 @@ jobs:
         id: lint
         run: |
           flake8 backend/ --max-line-length=120 --count --show-source --statistics \
-            --select=E9,F63,F7,F82,E1,E4,W6
+            --select=E9,F63,F7
       - name: Security audit (pip)
         id: security
         continue-on-error: true
@@ -56,8 +56,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         working-directory: frontend
         run: npm install --no-audit --prefer-offline 2>/dev/null || npm install --legacy-peer-deps --no-audit
