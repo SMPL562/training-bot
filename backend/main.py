@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 import aiohttp
 from collections import deque
 from database import SessionLocal, init_db
-from models import Template, Session, Team, User
+from models import Template, Session as SessionModel, Team, User
 from schemas import TemplateCreate, TeamCreate, UserCreate
 from crud import create_template, get_templates, create_team, get_teams, create_user, get_users
 from feedback import calculate_feedback
@@ -331,7 +331,7 @@ async def websocket_endpoint(websocket: WebSocket, template_id: int, db: Session
                 # Save session transcript and feedback
                 if session_transcript:
                     feedback = calculate_feedback(session_transcript, template.goals)
-                    db_session = Session(
+                    db_session = SessionModel(
                         template_id=template_id,
                         transcript=json.dumps(session_transcript),
                         feedback=feedback
